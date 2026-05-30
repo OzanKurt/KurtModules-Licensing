@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kurt\Modules\Licensing\Providers;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Route;
@@ -14,6 +15,9 @@ use Kurt\Modules\Licensing\Client\HttpLicenseTransport;
 use Kurt\Modules\Licensing\Client\IlluminateLicenseCache;
 use Kurt\Modules\Licensing\Client\LicenseManager;
 use Kurt\Modules\Licensing\Client\OfflineVerifier;
+use Kurt\Modules\Licensing\Console\Commands\ExpireLicensesCommand;
+use Kurt\Modules\Licensing\Console\Commands\GenerateKeysCommand;
+use Kurt\Modules\Licensing\Console\Commands\IssueLicenseCommand;
 use Kurt\Modules\Licensing\Http\Middleware\AuthenticatesComposer;
 use Kurt\Modules\Licensing\Server\Support\ActivationManager;
 use Kurt\Modules\Licensing\Server\Support\ComposerAuthValidator;
@@ -39,7 +43,12 @@ final class LicensingServiceProvider extends PackageServiceProvider
             ->name('laravel-modules-licensing')
             ->hasConfigFile('licensing')
             ->hasTranslations()
-            ->discoversMigrations();
+            ->discoversMigrations()
+            ->hasCommands([
+                GenerateKeysCommand::class,
+                IssueLicenseCommand::class,
+                ExpireLicensesCommand::class,
+            ]);
     }
 
     public function packageRegistered(): void
@@ -59,6 +68,14 @@ final class LicensingServiceProvider extends PackageServiceProvider
                 ->prefix((string) config('licensing.routes.prefix', 'licensing'))
                 ->name('licensing.')
                 ->group(__DIR__.'/../../routes/api.php');
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->app->booted(function (): void {
+                /** @var Schedule $schedule */
+                $schedule = $this->app->make(Schedule::class);
+                $schedule->command(ExpireLicensesCommand::class)->daily();
+            });
         }
     }
 
