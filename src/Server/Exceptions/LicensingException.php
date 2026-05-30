@@ -6,6 +6,4 @@ namespace Kurt\Modules\Licensing\Server\Exceptions;
 
 use RuntimeException;
 
-class LicensingException extends RuntimeException
-{
-}
+class LicensingException extends RuntimeException {}

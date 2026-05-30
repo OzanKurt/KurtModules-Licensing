@@ -1,6 +1,10 @@
 <?php
 
 declare(strict_types=1);
+use Kurt\Modules\Licensing\Server\Models\Activation;
+use Kurt\Modules\Licensing\Server\Models\License;
+use Kurt\Modules\Licensing\Server\Models\LicenseEvent;
+use Kurt\Modules\Licensing\Server\Models\Product;
 
 return [
     /*
@@ -79,9 +83,9 @@ return [
     |--------------------------------------------------------------------------
     */
     'models' => [
-        'product' => \Kurt\Modules\Licensing\Server\Models\Product::class,
-        'license' => \Kurt\Modules\Licensing\Server\Models\License::class,
-        'activation' => \Kurt\Modules\Licensing\Server\Models\Activation::class,
-        'license_event' => \Kurt\Modules\Licensing\Server\Models\LicenseEvent::class,
+        'product' => Product::class,
+        'license' => License::class,
+        'activation' => Activation::class,
+        'license_event' => LicenseEvent::class,
     ],
 ];

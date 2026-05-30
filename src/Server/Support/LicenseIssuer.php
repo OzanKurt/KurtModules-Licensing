@@ -26,7 +26,7 @@ final class LicenseIssuer
 
     /**
      * @param  array<string, mixed>  $attributes  At minimum `licensee_email`. May override
-     *                                             policy_type, max_activations, expires_at, etc.
+     *                                            policy_type, max_activations, expires_at, etc.
      */
     public function issue(Product $product, array $attributes): IssuedLicense
     {
