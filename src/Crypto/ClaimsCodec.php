@@ -15,7 +15,7 @@ use RuntimeException;
 final class ClaimsCodec
 {
     /**
-     * @param  array<string, mixed>  $claims
+     * @param  array<array-key, mixed>  $claims
      */
     public static function encode(array $claims): string
     {
