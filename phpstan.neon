@@ -19,7 +19,7 @@ parameters:
             # The version-dispatching facade is the one file that references
             # all three version namespaces by design, so it cannot be analysed
             # under any single-version config. Covered by runtime smoke tests.
-            - src/Filament/EventsPlugin.php
+            - src/Filament/LicensingPlugin.php (?)
     tmpDir: build/phpstan
     reportUnmatchedIgnoredErrors: false
     ignoreErrors:
