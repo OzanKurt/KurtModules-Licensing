@@ -1,0 +1,198 @@
+# Licensing
+
+Self-hosted software licensing for Laravel. Issue and validate license keys, sign
+offline license files, enforce per-machine seat limits, and gate private Composer
+downloads — everything you need to sell a premium Laravel/Filament package, running
+on your own infrastructure.
+
+Part of the **KurtModules** family. Headless by design, with an optional Filament
+admin (shipping in v1.1) and a **Core-free client SDK** you embed in the package you
+sell.
+
+## Features
+
+- **License keys** — human-friendly, crypto-random keys (`ABCD-EF23-GH45-JK67`).
+  Only a keyed HMAC of the key is stored, never the plaintext.
+- **Three policies** — `perpetual`, `subscription` (time-limited), and
+  `updates_window` (runs forever, but only downloads releases published before a
+  cutoff — the "license expires, software keeps working" model).
+- **Seat activations** — per-machine fingerprints with a configurable limit.
+  Re-activating the same machine is idempotent; deactivation frees the seat.
+- **Online + offline** — a JSON API for live validation, **and** Ed25519-signed
+  license files that verify entirely offline with only a public key.
+- **Composer gating** — an HTTP-Basic bridge (email + key) that authorizes Composer
+  downloads against the license, front your private Satis or use the bundled
+  `auth_request` endpoint.
+- **Audit trail** — every issue / activate / validate / composer decision is logged.
+- **Client SDK** — `Kurt\Modules\Licensing\Client\*` depends only on `illuminate/*`
+  (no Core), so you can embed it in the package you sell. Includes an offline grace
+  window so a network blip never bricks a paying customer.
+
+## Requirements
+
+- PHP 8.4+ (with `ext-sodium`, bundled in modern PHP)
+- Laravel 12
+- [`ozankurt/laravel-modules-core`](https://github.com/OzanKurt/KurtModules-Core) ^2.0
+
+## Installation
+
+```bash
+composer require ozankurt/laravel-modules-licensing
+```
+
+Core is not on Packagist yet, so add it as a VCS repository in your app's
+`composer.json`:
+
+```json
+"repositories": [
+    { "type": "vcs", "url": "https://github.com/OzanKurt/KurtModules-Core" }
+]
+```
+
+Publish config + migrations and migrate:
+
+```bash
+php artisan vendor:publish --tag=modules-licensing-config
+php artisan vendor:publish --tag=modules-licensing-migrations
+php artisan migrate
+```
+
+Generate a signing keypair and add it to `.env` (keep the signing key on the server only):
+
+```bash
+php artisan licensing:keygen
+# LICENSING_SIGNING_KEY=...   (server only — signs license files)
+# LICENSING_PUBLIC_KEY=...    (also embed in the package you sell — verifies them)
+```
+
+## Server usage
+
+### Define a product
+
+```php
+use Kurt\Modules\Licensing\Server\Models\Product;
+
+$product = Product::create([
+    'slug' => 'acme-pro',
+    'name' => ['en' => 'Acme Pro'],
+    'composer_packages' => ['acme/pro'],            // gated for Composer
+    'default_policy' => ['type' => 'subscription', 'max_activations' => 3],
+]);
+```
+
+### Issue a license
+
+```php
+use Kurt\Modules\Licensing\Facades\Licensing;
+
+$issued = Licensing::issue($product, [
+    'licensee_email' => 'buyer@example.com',
+    'expires_at' => now()->addYear(),
+]);
+
+$issued->key;      // 'ABCD-EF23-...' — show once, it is not recoverable
+$issued->license;  // the persisted License model
+```
+
+…or from the CLI:
+
+```bash
+php artisan licensing:issue acme-pro buyer@example.com --seats=3 --expires="2027-01-01"
+```
+
+### Sign a downloadable license file (offline activation)
+
+```php
+$blob = base64_encode(json_encode(Licensing::signFileFor($issued->license)));
+// hand `$blob` to the customer as a .lic file
+```
+
+## HTTP API
+
+Mounted under the configured prefix (default `licensing`, throttled `60,1`):
+
+| Method | Path                                    | Body                              | Response |
+| ------ | --------------------------------------- | --------------------------------- | -------- |
+| POST   | `/licensing/validate`                   | `{ key, fingerprint? }`           | `{ valid, reason, claims }` |
+| POST   | `/licensing/activate`                   | `{ key, fingerprint, label? }`    | `{ valid, claims }` / 422 / 404 |
+| POST   | `/licensing/deactivate`                 | `{ key, fingerprint }`            | `{ deactivated }` |
+| GET    | `/licensing/composer/authorize/{pkg}`   | HTTP Basic (email\:key)           | 204 / 401 / 403 |
+
+## Client SDK (embed in the package you sell)
+
+```php
+use Kurt\Modules\Licensing\Client\LicenseManager;
+
+// auto-resolved from config('licensing.client.*'): server_url + key
+$state = app(LicenseManager::class)->check();
+
+$state->ok();        // true when valid OR within the offline grace window
+$state->isGrace();   // true when the server was unreachable but a recent
+                     // success is cached and still inside grace_days
+$state->status;      // 'valid' | 'grace' | 'invalid'
+$state->claims;      // product, policy, seats, expiry, licensee, ...
+```
+
+Offline verification of a signed file — no server, only the public key:
+
+```php
+use Kurt\Modules\Licensing\Client\OfflineVerifier;
+
+$result = (new OfflineVerifier($publicKey))->verifyBlob($blob);
+$result->valid;   // signature + expiry checked locally
+```
+
+The machine fingerprint is stable and opaque (no raw host data leaves the machine):
+
+```php
+use Kurt\Modules\Licensing\Client\Fingerprint;
+
+Fingerprint::generate($installSalt);
+```
+
+## Composer download gating
+
+Apply the `licensing.composer` middleware to your private repository routes, or point
+an nginx `auth_request` at the bundled endpoint:
+
+```nginx
+location ~ ^/dist/(?<pkg>.+)\.zip$ {
+    auth_request /auth;
+}
+location = /auth {
+    internal;
+    proxy_pass https://licenses.example.com/licensing/composer/authorize/$pkg;
+    proxy_pass_request_body off;
+    proxy_set_header Authorization $http_authorization;
+}
+```
+
+Composer sends the buyer's email as the username and the license key as the password;
+the bridge authorizes against the license's product, status, and (for
+`updates_window`) the release date.
+
+## Configuration
+
+Key `.env` values:
+
+| Variable                     | Purpose                                            |
+| ---------------------------- | -------------------------------------------------- |
+| `LICENSING_SIGNING_KEY`      | Ed25519 secret — signs license files (server only) |
+| `LICENSING_PUBLIC_KEY`       | Ed25519 public — verifies files (server + clients) |
+| `LICENSING_KEY_HASH_SECRET`  | HMAC secret for key hashing (defaults to app key)  |
+| `LICENSING_SERVER_URL`       | Client: base URL of the licensing API              |
+| `LICENSING_KEY`              | Client: this install's license key                 |
+
+See `config/licensing.php` for the full reference.
+
+## Testing
+
+```bash
+composer test    # Pest
+composer stan    # PHPStan level 8
+composer lint    # Pint (dry-run)
+```
+
+## License
+
+MIT © Ozan Kurt
