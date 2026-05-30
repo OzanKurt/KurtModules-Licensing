@@ -2,6 +2,20 @@
 
 All notable changes to `ozankurt/laravel-modules-licensing` are documented here.
 
+## v1.1.0
+
+### Filament admin (v3 · v4 · v5)
+
+- `ProductResource` — full CRUD: name, slug, description, Composer packages,
+  default policy, active toggle, licenses count.
+- `LicenseResource` — browse/edit licensee, status, policy, seats, expiry; a
+  one-click **revoke** row action; filters by status and policy. Create is
+  disabled by design — licenses are minted via the issuer/API.
+- Version-dispatching `LicensingPlugin::make()` resolves the correct V{n}
+  resource set; opt in with `$panel->plugin(LicensingPlugin::make())`.
+- Per-Filament-major PHPStan configs and guarded introspection smoke tests; the
+  CI matrix analyses each version directory under its installed Filament major.
+
 ## v1.0.0
 
 Initial release — self-hosted software licensing for Laravel.

@@ -58,8 +58,10 @@ jobs:
             - name: Pint
               run: vendor/bin/pint --test
 
-            - name: PHPStan
-              run: vendor/bin/phpstan analyse --memory-limit=2G
+            - name: PHPStan (Filament ${{ matrix.filament }})
+              run: |
+                  MAJOR=$(echo "${{ matrix.filament }}" | cut -d. -f1)
+                  vendor/bin/phpstan analyse -c "phpstan-filament-v${MAJOR}.neon" --memory-limit=2G
 
             - name: Pest
               run: vendor/bin/pest

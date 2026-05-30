@@ -6,7 +6,7 @@ downloads — everything you need to sell a premium Laravel/Filament package, ru
 on your own infrastructure.
 
 Part of the **KurtModules** family. Headless by design, with an optional Filament
-admin (shipping in v1.1) and a **Core-free client SDK** you embed in the package you
+admin (Filament 3, 4 & 5) and a **Core-free client SDK** you embed in the package you
 sell.
 
 ## Features
@@ -170,6 +170,21 @@ location = /auth {
 Composer sends the buyer's email as the username and the license key as the password;
 the bridge authorizes against the license's product, status, and (for
 `updates_window`) the release date.
+
+## Filament admin (optional)
+
+If you run a Filament panel, register the version-dispatching plugin — the same
+call works on Filament 3, 4, and 5:
+
+```php
+use Kurt\Modules\Licensing\Filament\LicensingPlugin;
+
+$panel->plugin(LicensingPlugin::make());
+```
+
+It adds a **Products** resource (full CRUD) and a **Licenses** resource (browse,
+edit status/policy/seats, and a one-click **revoke** action). Licenses are minted
+through the issuer/API, so the Licenses resource has no "create" form by design.
 
 ## Configuration
 
