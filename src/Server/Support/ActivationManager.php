@@ -22,7 +22,7 @@ final class ActivationManager
     public function __construct(private readonly EventLogger $events) {}
 
     /**
-     * @param  array{label?: string|null, ip?: string|null, user_agent?: string|null}  $meta
+     * @param  array<string, string|null>  $meta  Optional label / ip / user_agent.
      */
     public function activate(License $license, string $fingerprint, array $meta = []): Activation
     {

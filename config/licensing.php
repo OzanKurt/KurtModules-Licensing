@@ -49,15 +49,15 @@ return [
     | Composer download gating
     |--------------------------------------------------------------------------
     |
-    | When `repository_enabled` is true, this app serves as a private Composer
-    | repository (packages.json + dist zips) gated by license keys, so you don't
-    | need a separate Satis. Otherwise the AuthenticatesComposer middleware can
-    | front your existing Satis.
+    | License keys gate Composer downloads via HTTP Basic auth (email = user,
+    | key = password). Apply the `licensing.composer` middleware to your private
+    | Satis/repository routes, or point an nginx `auth_request` at the bundled
+    | GET {prefix}/composer/authorize/{package} endpoint. `realm` is the Basic
+    | realm shown to Composer when a key is required.
     |
     */
     'composer' => [
-        'repository_enabled' => false,
-        'dist_disk' => env('LICENSING_DIST_DISK', 'local'),
+        'realm' => 'Composer',
     ],
 
     /*

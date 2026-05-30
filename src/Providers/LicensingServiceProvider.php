@@ -4,7 +4,17 @@ declare(strict_types=1);
 
 namespace Kurt\Modules\Licensing\Providers;
 
+use Illuminate\Http\Client\Factory as HttpFactory;
+use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Route;
 use Kurt\Modules\Core\Providers\PackageServiceProvider;
+use Kurt\Modules\Licensing\Client\Contracts\LicenseCache;
+use Kurt\Modules\Licensing\Client\Contracts\LicenseTransport;
+use Kurt\Modules\Licensing\Client\HttpLicenseTransport;
+use Kurt\Modules\Licensing\Client\IlluminateLicenseCache;
+use Kurt\Modules\Licensing\Client\LicenseManager;
+use Kurt\Modules\Licensing\Client\OfflineVerifier;
+use Kurt\Modules\Licensing\Http\Middleware\AuthenticatesComposer;
 use Kurt\Modules\Licensing\Server\Support\ActivationManager;
 use Kurt\Modules\Licensing\Server\Support\ComposerAuthValidator;
 use Kurt\Modules\Licensing\Server\Support\EventLogger;
@@ -13,6 +23,7 @@ use Kurt\Modules\Licensing\Server\Support\KeyHasher;
 use Kurt\Modules\Licensing\Server\Support\LicenseFileSigner;
 use Kurt\Modules\Licensing\Server\Support\LicenseIssuer;
 use Kurt\Modules\Licensing\Server\Support\LicenseValidator;
+use Kurt\Modules\Licensing\Support\Licensing;
 use Spatie\LaravelPackageTools\Package;
 
 final class LicensingServiceProvider extends PackageServiceProvider
@@ -32,6 +43,26 @@ final class LicensingServiceProvider extends PackageServiceProvider
     }
 
     public function packageRegistered(): void
+    {
+        $this->registerServerServices();
+        $this->registerClientServices();
+    }
+
+    public function packageBooted(): void
+    {
+        /** @var Router $router */
+        $router = $this->app->make(Router::class);
+        $router->aliasMiddleware('licensing.composer', AuthenticatesComposer::class);
+
+        if ((bool) config('licensing.routes.api_enabled', true)) {
+            Route::middleware(['throttle:'.(string) config('licensing.routes.throttle', '60,1')])
+                ->prefix((string) config('licensing.routes.prefix', 'licensing'))
+                ->name('licensing.')
+                ->group(__DIR__.'/../../routes/api.php');
+        }
+    }
+
+    private function registerServerServices(): void
     {
         $this->app->singleton(KeyGenerator::class, fn () => new KeyGenerator(
             (int) config('licensing.key.groups', 4),
@@ -53,5 +84,38 @@ final class LicensingServiceProvider extends PackageServiceProvider
         $this->app->singleton(ActivationManager::class);
         $this->app->singleton(LicenseValidator::class);
         $this->app->singleton(ComposerAuthValidator::class);
+        $this->app->singleton(Licensing::class);
+    }
+
+    /**
+     * Client bindings are lazy (bind, not singleton) and read config at resolve
+     * time, so a server-only install never constructs an HTTP transport and a
+     * client-only install never needs the server services.
+     */
+    private function registerClientServices(): void
+    {
+        $this->app->bind(OfflineVerifier::class, fn () => new OfflineVerifier(
+            (string) config('licensing.public_key', ''),
+        ));
+
+        $this->app->bind(LicenseCache::class, function () {
+            $store = config('licensing.client.cache_store');
+
+            return new IlluminateLicenseCache(
+                $this->app->make('cache')->store(is_string($store) ? $store : null),
+            );
+        });
+
+        $this->app->bind(LicenseTransport::class, fn () => new HttpLicenseTransport(
+            $this->app->make(HttpFactory::class),
+            rtrim((string) config('licensing.client.server_url', ''), '/'),
+        ));
+
+        $this->app->bind(LicenseManager::class, fn () => new LicenseManager(
+            (string) config('licensing.client.key', ''),
+            $this->app->make(LicenseTransport::class),
+            $this->app->make(LicenseCache::class),
+            (int) config('licensing.client.grace_days', 14),
+        ));
     }
 }
