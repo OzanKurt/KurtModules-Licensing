@@ -26,6 +26,11 @@ return [
         'groups' => 4,
         'group_size' => 4,
         'alphabet' => 'ABCDEFGHJKMNPQRSTUVWXYZ23456789',
+
+        // Keyed HMAC secret used to hash license keys for storage/lookup.
+        // Falls back to the app key; set a dedicated value to decouple license
+        // hashes from app-key rotation.
+        'hash_secret' => env('LICENSING_KEY_HASH_SECRET'),
     ],
 
     /*

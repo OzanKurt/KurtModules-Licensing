@@ -34,7 +34,7 @@ final class Ed25519
     {
         $secret = base64_decode($secretKeyBase64, true);
 
-        if ($secret === false) {
+        if ($secret === false || $secret === '') {
             throw new InvalidArgumentException('Invalid base64 secret key.');
         }
 
@@ -46,7 +46,7 @@ final class Ed25519
         $signature = base64_decode($signatureBase64, true);
         $public = base64_decode($publicKeyBase64, true);
 
-        if ($signature === false || $public === false) {
+        if ($signature === false || $signature === '' || $public === false || $public === '') {
             return false;
         }
 
