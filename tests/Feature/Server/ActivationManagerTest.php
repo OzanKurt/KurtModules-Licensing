@@ -51,3 +51,28 @@ it('refuses to activate a revoked license', function () {
 
     app(ActivationManager::class)->activate($license, 'machine-1');
 })->throws(LicenseNotUsableException::class);
+
+it('never exceeds the seat cap under repeated distinct-fingerprint activations', function () {
+    // Regression for the seat-limit TOCTOU race: looping distinct fingerprints
+    // against a 1-seat license (a sqlite-friendly proxy for concurrency) must
+    // never let active activations climb past max_activations.
+    $license = License::factory()->seats(1)->create();
+    $manager = app(ActivationManager::class);
+
+    $granted = 0;
+
+    foreach (range(1, 20) as $i) {
+        try {
+            $manager->activate($license, "machine-{$i}");
+            $granted++;
+        } catch (ActivationLimitReachedException) {
+            // Expected once the single seat is taken.
+        }
+
+        expect($license->fresh()->activeActivationsCount())
+            ->toBeLessThanOrEqual($license->max_activations);
+    }
+
+    expect($granted)->toBe(1);
+    expect($license->fresh()->activeActivationsCount())->toBe(1);
+});
