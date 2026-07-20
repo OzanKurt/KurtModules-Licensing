@@ -21,6 +21,14 @@ final class KeyHasher
         return hash_hmac('sha256', $this->normalize($key), $this->secret);
     }
 
+    /**
+     * Constant-time comparison helper. Kept for completeness / external callers:
+     * the server itself never uses it, since key lookups resolve through an
+     * indexed `where('key_hash', $this->hash($key))` query rather than fetching a
+     * row and comparing after the fact.
+     *
+     * @internal
+     */
     public function matches(string $key, string $hash): bool
     {
         return hash_equals($hash, $this->hash($key));
