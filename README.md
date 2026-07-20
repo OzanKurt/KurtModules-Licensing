@@ -119,16 +119,88 @@ how often clients must re-fetch. Clients whose clock is slightly off are covered
 by `licensing.offline.skew_tolerance` (seconds) so a valid file is not rejected
 on the boundary.
 
-## HTTP API
+## REST API
 
-Mounted under the configured prefix (default `licensing`, throttled `60,1`):
+An out-of-the-box JSON REST API, built on the shared **Core API kit** and
+**safe-by-default**: nothing is registered until you opt in. Enable it by setting
+the mode to `api` (or `ui`):
 
-| Method | Path                                    | Body                              | Response |
-| ------ | --------------------------------------- | --------------------------------- | -------- |
-| POST   | `/licensing/validate`                   | `{ key, fingerprint? }`           | `{ valid, reason, claims }` |
-| POST   | `/licensing/activate`                   | `{ key, fingerprint, label? }`    | `{ valid, claims }` / 422 / 404 |
-| POST   | `/licensing/deactivate`                 | `{ key, fingerprint }`            | `{ deactivated }` |
-| GET    | `/licensing/composer/authorize/{pkg}`   | HTTP Basic (email\:key)           | 204 / 401 / 403 |
+```dotenv
+LICENSING_HTTP_MODE=api
+```
+
+Everything is configured under `licensing.http` in `config/licensing.php`:
+
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `mode` | `headless` | `headless` (nothing registered) \| `api` \| `ui`. |
+| `prefix` | `api/licensing` | URL prefix for the route group. |
+| `middleware` | `['api']` | Base middleware for every route. |
+| `auth_middleware` | `['auth']` | Added to the admin (write) routes. |
+| `rate_limit` | `'60,1'` | `maxAttempts,decayMinutes` for the `licensing-api` throttle. |
+| `ability` | `licensing:manage` | Gate ability the admin policies check (deny-by-default). |
+
+### Authentication model
+
+The API has two tiers with different authentication:
+
+- **Machine endpoints** (`validate` / `activate` / `deactivate`) authenticate by
+  the **license key in the request body** — there is no logged-in user. They are
+  the public-ish surface the client SDK talks to, run through the domain services
+  (so seat accounting and expiry / `not_after` semantics are preserved), and are
+  throttled by the `licensing-api` limiter. They return the flat
+  `{ valid, reason, claims }` shape and never expose internal fields. There is no
+  way to validate or forge without the real key.
+- **Admin endpoints** (licenses, products, activations) additionally require the
+  `auth_middleware` **plus a Policy**. The `LicensePolicy` / `ProductPolicy` gate
+  on the `licensing:manage` ability, which is **deny-by-default**: define it in
+  your app to grant access.
+
+  ```php
+  use Illuminate\Support\Facades\Gate;
+
+  Gate::define('licensing:manage', fn ($user) => $user->isAdmin());
+  ```
+
+  Guests get `401`; authenticated-but-unauthorized users get `403`.
+
+### Endpoints
+
+Mounted under `prefix` (default `api/licensing`). Machine endpoints:
+
+| Method | Path                | Auth       | Body                           | Response |
+| ------ | ------------------- | ---------- | ------------------------------ | -------- |
+| POST   | `validate`          | key        | `{ key, fingerprint? }`        | `{ valid, reason, claims }` |
+| POST   | `activate`          | key        | `{ key, fingerprint, label? }` | `{ valid, claims }` / 422 / 404 |
+| POST   | `deactivate`        | key        | `{ key, fingerprint }`         | `{ deactivated }` |
+
+Admin endpoints (auth + `licensing:manage`), enveloped as `{ data, meta }`:
+
+| Method | Path                                 | Purpose |
+| ------ | ------------------------------------ | ------- |
+| GET    | `licenses`                           | List (sort/filter/paginate). |
+| POST   | `licenses`                           | Issue a license; returns the plaintext `key` once. |
+| GET    | `licenses/{license}`                 | Show. |
+| PATCH  | `licenses/{license}`                 | Update status / policy / seats. |
+| POST   | `licenses/{license}/revoke`          | Revoke (`{ reason? }`). |
+| GET    | `licenses/{license}/activations`     | List a license's seat activations. |
+| GET    | `products`                           | List. |
+| POST   | `products`                           | Create. |
+| GET    | `products/{product}`                 | Show. |
+| PATCH  | `products/{product}`                 | Update. |
+| DELETE | `products/{product}`                 | Delete. |
+
+Index endpoints accept `?sort=`, `?filter[field]=`, `?per_page=` / `?page=` per
+the Core API kit conventions.
+
+### Composer authorize endpoint
+
+Separate from the REST API kit and **enabled by default** (it is `auth_request`
+infrastructure, not a user-facing API), mounted under `licensing.routes.prefix`:
+
+| Method | Path                                    | Body                    | Response |
+| ------ | --------------------------------------- | ----------------------- | -------- |
+| GET    | `/licensing/composer/authorize/{pkg}`   | HTTP Basic (email\:key) | 204 / 401 / 403 |
 
 ## Client SDK (embed in the package you sell)
 
@@ -209,6 +281,7 @@ Key `.env` values:
 | `LICENSING_KEY_HASH_SECRET`  | HMAC secret for key hashing (defaults to app key)  |
 | `LICENSING_SERVER_URL`       | Client: base URL of the licensing API              |
 | `LICENSING_KEY`              | Client: this install's license key                 |
+| `LICENSING_HTTP_MODE`        | REST API mode: `headless` (default) / `api` / `ui` |
 
 See `config/licensing.php` for the full reference.
 

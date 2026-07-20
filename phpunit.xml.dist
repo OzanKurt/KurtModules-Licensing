@@ -15,6 +15,7 @@
         </testsuite>
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
+            <directory>tests/Api</directory>
         </testsuite>
     </testsuites>
     <source>

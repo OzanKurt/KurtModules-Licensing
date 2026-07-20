@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Kurt\Modules\Licensing\Http\Controllers\Api;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Kurt\Modules\Core\Http\Controllers\ApiController;
+use Kurt\Modules\Licensing\Http\Requests\ActivateLicenseRequest;
+use Kurt\Modules\Licensing\Http\Requests\DeactivateLicenseRequest;
+use Kurt\Modules\Licensing\Http\Requests\ValidateLicenseRequest;
 use Kurt\Modules\Licensing\Server\Exceptions\ActivationLimitReachedException;
 use Kurt\Modules\Licensing\Server\Exceptions\LicensingException;
 use Kurt\Modules\Licensing\Server\Models\License;
@@ -15,24 +18,26 @@ use Kurt\Modules\Licensing\Server\Support\LicenseClaims;
 use Kurt\Modules\Licensing\Server\Support\LicenseValidator;
 
 /**
- * Public licensing API consumed by the client SDK. Responses mirror the SDK's
- * ValidationResponse shape: { valid, reason, claims }.
+ * Machine-facing licensing API consumed by the client SDK. These endpoints
+ * authenticate by the license key carried in the request body — not a logged-in
+ * user — and go through the domain services so seat accounting and offline /
+ * expiry semantics are preserved.
+ *
+ * Responses use the flat `{ valid, reason, claims }` / `{ deactivated }` shape
+ * the SDK's HttpLicenseTransport expects, deliberately not the Core `data`
+ * envelope. Only the public claim set (never internal fields like key_hash) is
+ * ever returned.
  */
-final class LicenseApiController
+final class LicenseApiController extends ApiController
 {
-    public function validate(Request $request, LicenseValidator $validator): JsonResponse
+    public function validateLicense(ValidateLicenseRequest $request, LicenseValidator $validator): JsonResponse
     {
-        $validated = $request->validate([
-            'key' => ['required', 'string'],
-            'fingerprint' => ['nullable', 'string'],
-        ]);
+        $validated = $request->validated();
 
-        $key = (string) $validated['key'];
-        $fingerprint = isset($validated['fingerprint']) && is_string($validated['fingerprint'])
-            ? $validated['fingerprint']
-            : null;
-
-        $result = $validator->validateKey($key, $fingerprint);
+        $result = $validator->validateKey(
+            (string) $validated['key'],
+            isset($validated['fingerprint']) && is_string($validated['fingerprint']) ? $validated['fingerprint'] : null,
+        );
 
         return response()->json([
             'valid' => $result->valid,
@@ -43,14 +48,9 @@ final class LicenseApiController
         ]);
     }
 
-    public function activate(Request $request, KeyHasher $hasher, ActivationManager $activations): JsonResponse
+    public function activate(ActivateLicenseRequest $request, KeyHasher $hasher, ActivationManager $activations): JsonResponse
     {
-        $validated = $request->validate([
-            'key' => ['required', 'string'],
-            'fingerprint' => ['required', 'string'],
-            'label' => ['nullable', 'string'],
-        ]);
-
+        $validated = $request->validated();
         $license = License::query()->where('key_hash', $hasher->hash((string) $validated['key']))->first();
 
         if ($license === null) {
@@ -58,7 +58,7 @@ final class LicenseApiController
         }
 
         $meta = array_filter([
-            'label' => is_string($validated['label'] ?? null) ? $validated['label'] : null,
+            'label' => isset($validated['label']) && is_string($validated['label']) ? $validated['label'] : null,
             'ip' => $request->ip(),
             'user_agent' => $request->userAgent(),
         ], static fn ($value): bool => $value !== null);
@@ -79,13 +79,9 @@ final class LicenseApiController
         ]);
     }
 
-    public function deactivate(Request $request, KeyHasher $hasher, ActivationManager $activations): JsonResponse
+    public function deactivate(DeactivateLicenseRequest $request, KeyHasher $hasher, ActivationManager $activations): JsonResponse
     {
-        $validated = $request->validate([
-            'key' => ['required', 'string'],
-            'fingerprint' => ['required', 'string'],
-        ]);
-
+        $validated = $request->validated();
         $license = License::query()->where('key_hash', $hasher->hash((string) $validated['key']))->first();
 
         if ($license === null) {
