@@ -39,13 +39,51 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Routes
+    | Composer authorize endpoint
     |--------------------------------------------------------------------------
+    |
+    | The HTTP Basic `GET {prefix}/composer/authorize/{package}` endpoint used as
+    | an nginx `auth_request` / Satis pre-auth target. This is download-gating
+    | infrastructure, separate from the REST API kit below, and stays enabled by
+    | default so private Composer access keeps working out of the box.
+    |
     */
     'routes' => [
         'api_enabled' => true,
         'prefix' => 'licensing',
         'throttle' => '60,1',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | REST API (Core API kit)
+    |--------------------------------------------------------------------------
+    |
+    | The out-of-the-box JSON REST API, built on the shared Core API kit and
+    | safe-by-default: nothing is registered until you opt in.
+    |
+    |   mode = headless -> no routes registered (default).
+    |   mode = api      -> the JSON API is mounted under `prefix`.
+    |   mode = ui       -> same as `api` (this package ships no HTML pages).
+    |
+    | The machine-facing endpoints (POST validate / activate / deactivate)
+    | authenticate by the license key carried in the request body and are always
+    | reachable when the API is enabled. The admin CRUD endpoints (licenses,
+    | products, activations) additionally require `auth_middleware` plus a Policy.
+    | Every route is throttled by the named `licensing-api` limiter.
+    |
+    */
+    'http' => [
+        'mode' => env('LICENSING_HTTP_MODE', 'headless'),
+        'prefix' => 'api/licensing',
+        'middleware' => ['api'],
+        'auth_middleware' => ['auth'],
+        'rate_limit' => '60,1',
+
+        // Gate ability the admin policies check. Deny-by-default: define it in
+        // the host app to grant management access, e.g.
+        // Gate::define('licensing:manage', fn ($user) => $user->isAdmin());
+        'ability' => 'licensing:manage',
     ],
 
     /*

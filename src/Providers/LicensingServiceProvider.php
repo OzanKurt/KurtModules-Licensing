@@ -7,6 +7,7 @@ namespace Kurt\Modules\Licensing\Providers;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Kurt\Modules\Core\Providers\PackageServiceProvider;
 use Kurt\Modules\Licensing\Client\Contracts\LicenseCache;
@@ -19,6 +20,10 @@ use Kurt\Modules\Licensing\Console\Commands\ExpireLicensesCommand;
 use Kurt\Modules\Licensing\Console\Commands\GenerateKeysCommand;
 use Kurt\Modules\Licensing\Console\Commands\IssueLicenseCommand;
 use Kurt\Modules\Licensing\Http\Middleware\AuthenticatesComposer;
+use Kurt\Modules\Licensing\Policies\LicensePolicy;
+use Kurt\Modules\Licensing\Policies\ProductPolicy;
+use Kurt\Modules\Licensing\Server\Models\License;
+use Kurt\Modules\Licensing\Server\Models\Product;
 use Kurt\Modules\Licensing\Server\Support\ActivationManager;
 use Kurt\Modules\Licensing\Server\Support\ComposerAuthValidator;
 use Kurt\Modules\Licensing\Server\Support\EventLogger;
@@ -63,12 +68,20 @@ final class LicensingServiceProvider extends PackageServiceProvider
         $router = $this->app->make(Router::class);
         $router->aliasMiddleware('licensing.composer', AuthenticatesComposer::class);
 
+        $this->registerPolicies();
+
+        // Composer download-gating endpoint — separate from the REST API kit and
+        // enabled by default so private Composer access keeps working.
         if ((bool) config('licensing.routes.api_enabled', true)) {
             Route::middleware(['throttle:'.(string) config('licensing.routes.throttle', '60,1')])
                 ->prefix((string) config('licensing.routes.prefix', 'licensing'))
                 ->name('licensing.')
-                ->group(__DIR__.'/../../routes/api.php');
+                ->group(__DIR__.'/../../routes/composer.php');
         }
+
+        // Out-of-the-box REST API, built on the Core API kit. No-op while
+        // `licensing.http.mode` is headless (the safe default).
+        $this->registerModuleApi(__DIR__.'/../../routes/api.php');
 
         if ($this->app->runningInConsole()) {
             $this->app->booted(function (): void {
@@ -77,6 +90,23 @@ final class LicensingServiceProvider extends PackageServiceProvider
                 $schedule->command(ExpireLicensesCommand::class)->daily();
             });
         }
+    }
+
+    /**
+     * Map the admin API models to their policies. Both policies gate on the
+     * host-defined `licensing:manage` ability (deny-by-default), so the admin
+     * CRUD endpoints stay locked down until the host opts in.
+     */
+    private function registerPolicies(): void
+    {
+        Gate::policy(
+            (string) config('licensing.models.license', License::class),
+            LicensePolicy::class,
+        );
+        Gate::policy(
+            (string) config('licensing.models.product', Product::class),
+            ProductPolicy::class,
+        );
     }
 
     private function registerServerServices(): void

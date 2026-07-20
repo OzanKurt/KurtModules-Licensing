@@ -5,9 +5,15 @@ declare(strict_types=1);
 use Filament\Forms\Form;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Kurt\Modules\Licensing\Tests\ApiTestCase;
 use Kurt\Modules\Licensing\Tests\TestCase;
 
 pest()->extend(TestCase::class)->in('Feature');
+
+// The REST API kit tests need the module booted with `http.mode = api` so the
+// `api/licensing/*` routes register. Kept in a sibling `tests/Api` suite so the
+// binding does not overlap the headless-default `Feature` suite.
+pest()->extend(ApiTestCase::class)->in('Api');
 
 /*
 |--------------------------------------------------------------------------
