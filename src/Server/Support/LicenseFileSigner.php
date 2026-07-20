@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kurt\Modules\Licensing\Server\Support;
 
+use Carbon\CarbonImmutable;
 use Kurt\Modules\Licensing\Crypto\ClaimsCodec;
 use Kurt\Modules\Licensing\Crypto\Ed25519;
 use Kurt\Modules\Licensing\Server\Exceptions\LicensingException;
@@ -13,6 +14,13 @@ use Kurt\Modules\Licensing\Server\Exceptions\LicensingException;
  * self-contained: the client verifies it offline using only the embedded
  * public key, with no call back to the server. The signature covers the
  * canonical encoding of `claims`, so any tampering invalidates it.
+ *
+ * Because an offline file never phones home, it carries its own expiry for
+ * withdrawal: `sign()` stamps every file with a `not_after` claim `ttlDays`
+ * ahead of signing time. Once that passes the client refuses the file and must
+ * re-download a freshly signed one, so a revoked license lapses within a single
+ * TTL window with no server round-trip. `not_after` is inside `claims`, so the
+ * signature covers it and it cannot be pushed out by tampering.
  */
 final class LicenseFileSigner
 {
@@ -21,6 +29,7 @@ final class LicenseFileSigner
     public function __construct(
         private readonly string $secretKey,
         private readonly string $publicKey,
+        private readonly int $ttlDays = 7,
     ) {}
 
     /**
@@ -32,6 +41,10 @@ final class LicenseFileSigner
         if ($this->secretKey === '') {
             throw new LicensingException('No signing key configured (licensing.signing_key).');
         }
+
+        $claims['not_after'] = CarbonImmutable::now()
+            ->addDays(max(1, $this->ttlDays))
+            ->toIso8601String();
 
         return [
             'format' => self::FORMAT,

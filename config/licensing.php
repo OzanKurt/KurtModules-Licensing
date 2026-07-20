@@ -66,6 +66,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Offline license files
+    |--------------------------------------------------------------------------
+    |
+    | Signed offline files verify with no server call, so they need their own
+    | withdrawal path. Every file the server signs embeds a `not_after`
+    | timestamp `reissue_ttl_days` in the future; the client rejects a file once
+    | that moment passes and must re-download a freshly signed one. This is the
+    | re-issue cadence: a revoked or downgraded license stops working within one
+    | TTL window without ever contacting the server. Keep it short enough that
+    | revocation takes effect promptly, long enough that clients are not forced
+    | to re-download constantly (7 days is a sensible default).
+    |
+    | `skew_tolerance` is the leeway (in seconds) applied when comparing
+    | `expires_at` / `not_after` against the local clock, so a client whose
+    | clock is slightly fast does not fail an otherwise-valid file.
+    |
+    */
+    'offline' => [
+        'reissue_ttl_days' => 7,
+        'skew_tolerance' => 60,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Client SDK
     |--------------------------------------------------------------------------
     */

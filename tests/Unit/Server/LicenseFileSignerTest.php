@@ -42,6 +42,13 @@ it('produces a signature that breaks when claims are tampered', function () {
     ))->toBeFalse();
 });
 
+it('stamps every signed file with a future not_after re-issue window', function () {
+    $file = freshSigner()->sign(['seats' => 1]);
+
+    expect($file['claims'])->toHaveKey('not_after');
+    expect(strtotime((string) $file['claims']['not_after']))->toBeGreaterThan(time());
+});
+
 it('throws when no signing key is configured', function () {
     (new LicenseFileSigner('', ''))->sign(['x' => 1]);
 })->throws(LicensingException::class);

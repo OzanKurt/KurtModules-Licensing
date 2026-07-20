@@ -20,7 +20,13 @@ use Kurt\Modules\Licensing\Server\Models\License;
  */
 final class ActivationManager
 {
-    public function __construct(private readonly EventLogger $events) {}
+    /** Domain tag that namespaces fingerprint digests away from key hashes. */
+    private const FINGERPRINT_DOMAIN = 'fingerprint:';
+
+    public function __construct(
+        private readonly EventLogger $events,
+        private readonly KeyHasher $hasher,
+    ) {}
 
     /**
      * @param  array<string, string|null>  $meta  Optional label / ip / user_agent.
@@ -32,9 +38,10 @@ final class ActivationManager
         }
 
         $hash = $this->fingerprintHash($fingerprint);
+        $hashes = $this->fingerprintHashes($fingerprint);
 
         try {
-            return DB::transaction(function () use ($license, $hash, $meta): Activation {
+            return DB::transaction(function () use ($license, $hash, $hashes, $meta): Activation {
                 // Serialize concurrent activations of the same license: the row
                 // lock forces competing transactions to queue here, so the seat
                 // check + insert below cannot interleave and overshoot the cap
@@ -42,7 +49,7 @@ final class ActivationManager
                 // count authoritative.
                 License::whereKey($license->getKey())->lockForUpdate()->first();
 
-                $existing = $license->activations()->where('fingerprint_hash', $hash)->first();
+                $existing = $license->activations()->whereIn('fingerprint_hash', $hashes)->first();
 
                 if ($existing !== null && $existing->isActive()) {
                     $existing->update([
@@ -90,25 +97,52 @@ final class ActivationManager
     public function deactivate(License $license, string $fingerprint): bool
     {
         $hash = $this->fingerprintHash($fingerprint);
+        $hashes = $this->fingerprintHashes($fingerprint);
 
-        $activation = $license->activations()
-            ->where('fingerprint_hash', $hash)
-            ->whereNull('deactivated_at')
-            ->first();
+        // Take the same license-row lock as activate() so freeing a seat is
+        // serialized against seat-consuming activations: without it a concurrent
+        // activate() could read the seat count before this release commits and
+        // wrongly reject (or, symmetrically, over-grant) against a stale count.
+        return DB::transaction(function () use ($license, $hash, $hashes): bool {
+            License::whereKey($license->getKey())->lockForUpdate()->first();
 
-        if ($activation === null) {
-            return false;
-        }
+            $activation = $license->activations()
+                ->whereIn('fingerprint_hash', $hashes)
+                ->whereNull('deactivated_at')
+                ->first();
 
-        $activation->update(['deactivated_at' => now()]);
-        $this->events->log($license, LicenseEventType::Deactivated, ['fingerprint' => $hash]);
+            if ($activation === null) {
+                return false;
+            }
 
-        return true;
+            $activation->update(['deactivated_at' => now()]);
+            $this->events->log($license, LicenseEventType::Deactivated, ['fingerprint' => $hash]);
+
+            return true;
+        });
     }
 
+    /**
+     * Current, domain-separated keyed digest of a fingerprint. New activations
+     * store this; it supersedes the legacy unkeyed SHA-256 for domain
+     * separation and to stop a leaked table being brute-forced offline.
+     */
     public function fingerprintHash(string $fingerprint): string
     {
-        return hash('sha256', $fingerprint);
+        return $this->hasher->hmac($fingerprint, self::FINGERPRINT_DOMAIN);
+    }
+
+    /**
+     * The digests to match a fingerprint against on read: the current keyed
+     * hash plus the legacy unkeyed SHA-256. Existing activations were stored
+     * under the legacy scheme, so matching both keeps upgrades non-breaking —
+     * old seats stay recognized while new ones use the keyed hash.
+     *
+     * @return array<int, string>
+     */
+    public function fingerprintHashes(string $fingerprint): array
+    {
+        return [$this->fingerprintHash($fingerprint), hash('sha256', $fingerprint)];
     }
 
     private function reason(License $license): string

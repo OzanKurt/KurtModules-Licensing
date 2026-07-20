@@ -53,10 +53,8 @@ final class LicenseValidator
         }
 
         if ($fingerprint !== null) {
-            $hash = $this->activations->fingerprintHash($fingerprint);
-
             $seat = $license->activations()
-                ->where('fingerprint_hash', $hash)
+                ->whereIn('fingerprint_hash', $this->activations->fingerprintHashes($fingerprint))
                 ->whereNull('deactivated_at');
 
             if (! $seat->exists()) {
