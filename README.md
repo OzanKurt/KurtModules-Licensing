@@ -107,6 +107,18 @@ $blob = base64_encode(json_encode(Licensing::signFileFor($issued->license)));
 // hand `$blob` to the customer as a .lic file
 ```
 
+Every signed file embeds a `not_after` timestamp (inside the signed claims, so it
+cannot be tampered out) set `licensing.offline.reissue_ttl_days` in the future
+(default 7 days). The client refuses a file once that moment passes and must
+re-download a fresh one. This is the offline **revocation / re-issue cadence**:
+because an offline file never phones home, withdrawing entitlement (revoke,
+downgrade, non-renewal) simply means not re-signing a new file — the old one
+lapses within one TTL window. Point customers at a re-download endpoint (or ship
+a new `.lic` on renewal) and pick a TTL that trades revocation latency against
+how often clients must re-fetch. Clients whose clock is slightly off are covered
+by `licensing.offline.skew_tolerance` (seconds) so a valid file is not rejected
+on the boundary.
+
 ## HTTP API
 
 Mounted under the configured prefix (default `licensing`, throttled `60,1`):
@@ -139,7 +151,7 @@ Offline verification of a signed file — no server, only the public key:
 use Kurt\Modules\Licensing\Client\OfflineVerifier;
 
 $result = (new OfflineVerifier($publicKey))->verifyBlob($blob);
-$result->valid;   // signature + expiry checked locally
+$result->valid;   // format tag, signature, expiry, and not_after checked locally
 ```
 
 The machine fingerprint is stable and opaque (no raw host data leaves the machine):

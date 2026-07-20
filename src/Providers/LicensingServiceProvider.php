@@ -94,6 +94,7 @@ final class LicensingServiceProvider extends PackageServiceProvider
         $this->app->singleton(LicenseFileSigner::class, fn () => new LicenseFileSigner(
             (string) config('licensing.signing_key', ''),
             (string) config('licensing.public_key', ''),
+            (int) config('licensing.offline.reissue_ttl_days', 7),
         ));
 
         $this->app->singleton(EventLogger::class);
@@ -113,6 +114,7 @@ final class LicensingServiceProvider extends PackageServiceProvider
     {
         $this->app->bind(OfflineVerifier::class, fn () => new OfflineVerifier(
             (string) config('licensing.public_key', ''),
+            (int) config('licensing.offline.skew_tolerance', 60),
         ));
 
         $this->app->bind(LicenseCache::class, function () {

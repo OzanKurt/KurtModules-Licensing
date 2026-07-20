@@ -6,7 +6,8 @@ namespace Kurt\Modules\Licensing\Client\Data;
 
 /**
  * Result of verifying a downloadable signed license file with no server call.
- * `$reason` is a stable code: "malformed", "bad_signature", "expired".
+ * `$reason` is a stable code: "malformed", "unsupported_format",
+ * "bad_signature", "expired", "stale" (past its `not_after` re-issue window).
  */
 final readonly class OfflineResult
 {
