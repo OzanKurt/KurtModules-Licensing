@@ -9,6 +9,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
+use Kurt\Modules\Core\Modules\ModuleManifest;
 use Kurt\Modules\Core\Providers\PackageServiceProvider;
 use Kurt\Modules\Licensing\Client\Contracts\LicenseCache;
 use Kurt\Modules\Licensing\Client\Contracts\LicenseTransport;
@@ -62,8 +63,17 @@ final class LicensingServiceProvider extends PackageServiceProvider
         $this->registerClientServices();
     }
 
+    protected function moduleManifest(): ?ModuleManifest
+    {
+        return ModuleManifest::make('licensing')
+            ->name('Licensing')
+            ->description('Self-hosted software licensing for Laravel: issue/validate license keys, Ed25519 signed offline keys, seat activations, private Composer gating, and a Core-free client SDK.');
+    }
+
     public function packageBooted(): void
     {
+        parent::packageBooted();
+
         /** @var Router $router */
         $router = $this->app->make(Router::class);
         $router->aliasMiddleware('licensing.composer', AuthenticatesComposer::class);
