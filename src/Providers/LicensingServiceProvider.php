@@ -63,7 +63,7 @@ final class LicensingServiceProvider extends PackageServiceProvider
         $this->registerClientServices();
     }
 
-    protected function moduleManifest(): ?ModuleManifest
+    protected function moduleManifest(): ModuleManifest
     {
         return ModuleManifest::make('licensing')
             ->name('Licensing')
