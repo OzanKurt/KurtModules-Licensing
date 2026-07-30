@@ -31,7 +31,7 @@ sell.
 ## Requirements
 
 - PHP 8.4+ (with `ext-sodium`, bundled in modern PHP)
-- Laravel 12
+- Laravel 13
 - [`ozankurt/laravel-modules-core`](https://github.com/OzanKurt/KurtModules-Core) ^2.0
 
 ## Installation

@@ -2,6 +2,18 @@
 
 All notable changes to `ozankurt/laravel-modules-licensing` are documented here.
 
+## v2.0.0
+
+### Breaking changes
+
+- Requires PHP 8.4+ (drops PHP 8.3).
+- Requires Laravel 13 (drops Laravel 12).
+- Requires `ozankurt/laravel-modules-core` ^2.0.
+- Test suite runs on Pest 5 / Testbench 11.
+
+No public API changed: the licensing server, client SDK, HTTP endpoints and
+Filament resources are identical to v1.1.0.
+
 ## v1.1.0
 
 ### Filament admin (v3 · v4 · v5)
