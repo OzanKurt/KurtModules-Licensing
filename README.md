@@ -1,5 +1,7 @@
 # Licensing
 
+[![tests](https://github.com/OzanKurt/laravel-modules-licensing/actions/workflows/tests.yml/badge.svg)](https://github.com/OzanKurt/laravel-modules-licensing/actions/workflows/tests.yml)
+
 Self-hosted software licensing for Laravel. Issue and validate license keys, sign
 offline license files, enforce per-machine seat limits, and gate private Composer
 downloads — everything you need to sell a premium Laravel/Filament package, running
@@ -30,9 +32,9 @@ sell.
 
 ## Requirements
 
-- PHP 8.4+ (with `ext-sodium`, bundled in modern PHP)
-- Laravel 13
-- [`ozankurt/laravel-modules-core`](https://github.com/OzanKurt/KurtModules-Core) ^2.0
+- PHP `^8.4`
+- Laravel `^13.0`
+- [`ozankurt/laravel-modules-core`](https://github.com/OzanKurt/laravel-modules-core) ^2.0
 
 ## Installation
 
@@ -45,7 +47,7 @@ Core is not on Packagist yet, so add it as a VCS repository in your app's
 
 ```json
 "repositories": [
-    { "type": "vcs", "url": "https://github.com/OzanKurt/KurtModules-Core" }
+    { "type": "vcs", "url": "https://github.com/OzanKurt/laravel-modules-core" }
 ]
 ```
 
@@ -288,10 +290,15 @@ See `config/licensing.php` for the full reference.
 ## Testing
 
 ```bash
-composer test    # Pest
-composer stan    # PHPStan level 8
-composer lint    # Pint (dry-run)
+composer install
+vendor/bin/pint --test
+vendor/bin/phpstan analyse --memory-limit=2G
+vendor/bin/pest
 ```
+
+CI runs the same checks on every push and pull request
+(`.github/workflows/tests.yml`), against PHP 8.4 / Laravel 13. Static analysis
+is held at **PHPStan level 8**; the suite runs on **Pest 5**.
 
 ## License
 
